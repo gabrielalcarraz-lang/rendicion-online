@@ -1,9 +1,11 @@
 import axios from 'axios';
 
-const backendHost = window.location.hostname || 'localhost';
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || `http://${backendHost}:3000/api`,
-});
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('26.');
+const baseURL = isLocal 
+  ? `http://${window.location.hostname}:3000/api` 
+  : 'https://rendicion-online.onrender.com/api';
+
+const api = axios.create({ baseURL });
 
 export const getReports = () => api.get('/reports');
 export const createReport = (name) => api.post('/reports', { name });
