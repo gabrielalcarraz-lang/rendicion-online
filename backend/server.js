@@ -44,7 +44,8 @@ let db;
 let pool;
 if (process.env.DATABASE_URL) {
   const { Pool } = require('pg');
-  const cleanUrl = process.env.DATABASE_URL.replace(/&channel_binding=require/g, '').replace(/\?channel_binding=require/g, '');
+  // Strip query parameters to prevent pg parser from overriding our ssl config
+  const cleanUrl = process.env.DATABASE_URL.split('?')[0];
   pool = new Pool({
     connectionString: cleanUrl,
     ssl: { rejectUnauthorized: false }
