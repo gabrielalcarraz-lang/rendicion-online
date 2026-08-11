@@ -67,6 +67,7 @@ if (process.env.DATABASE_URL) {
          translated += ' RETURNING id';
       }
       pool.query(translated, params, (err, res) => {
+         if (err) console.error("PG Query Error:", translated, err.message);
          const context = {
             lastID: res && res.rows && res.rows.length > 0 ? res.rows[0].id : null,
             changes: res ? res.rowCount : 0
@@ -74,7 +75,14 @@ if (process.env.DATABASE_URL) {
          if (cb) cb.call(context, err);
       });
     },
-    serialize: (cb) => { cb(); },
+    serialize: (cb) => { 
+      // Since pg queries are async and we need sequential creation for foreign keys,
+      // we'll execute cb() but we should actually await table creations.
+      // To keep compatibility without huge refactor, we let it run, 
+      // but ideally we'd use a real async flow.
+      cb(); 
+    },
+    // We will bypass serialize for initialization below and use pool directly.
     prepare: (sql) => {
       const translated = translateQuery(sql);
       return {
@@ -102,19 +110,24 @@ if (process.env.DATABASE_URL) {
   console.log("Using SQLite for database.");
 }
 
-db.serialize(() => {
+// Initialize tables
+async function initializeDB() {
   const serialType = process.env.DATABASE_URL ? 'SERIAL' : 'INTEGER';
   const autoinc = process.env.DATABASE_URL ? '' : 'AUTOINCREMENT';
   const datetimeType = process.env.DATABASE_URL ? 'TIMESTAMP' : 'DATETIME';
 
-  db.run(`CREATE TABLE IF NOT EXISTS reports (
+  const runQuery = (sql) => new Promise((resolve) => {
+    db.run(sql, [], (err) => resolve(err));
+  });
+
+  await runQuery(`CREATE TABLE IF NOT EXISTS reports (
     id ${serialType} PRIMARY KEY ${autoinc},
     name TEXT NOT NULL,
     status TEXT DEFAULT 'open',
     created_at ${datetimeType} DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS receipts (
+  const errReceipts = await runQuery(`CREATE TABLE IF NOT EXISTS receipts (
     id ${serialType} PRIMARY KEY ${autoinc},
     report_id INTEGER,
     name TEXT,
@@ -123,14 +136,13 @@ db.serialize(() => {
     iva REAL DEFAULT 0,
     total_amount REAL DEFAULT 0,
     FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE
-  )`, (err) => {
-    if (!err) {
-       db.run(`ALTER TABLE receipts ADD COLUMN iva REAL DEFAULT 0`, () => {});
-       db.run(`ALTER TABLE receipts ADD COLUMN total_amount REAL DEFAULT 0`, () => {});
-    }
-  });
+  )`);
+  if (!errReceipts) {
+    await runQuery(`ALTER TABLE receipts ADD COLUMN iva REAL DEFAULT 0`);
+    await runQuery(`ALTER TABLE receipts ADD COLUMN total_amount REAL DEFAULT 0`);
+  }
 
-  db.run(`CREATE TABLE IF NOT EXISTS items (
+  const errItems = await runQuery(`CREATE TABLE IF NOT EXISTS items (
     id ${serialType} PRIMARY KEY ${autoinc},
     receipt_id INTEGER,
     description TEXT,
@@ -138,20 +150,23 @@ db.serialize(() => {
     unit_price REAL DEFAULT 0,
     amount REAL,
     FOREIGN KEY(receipt_id) REFERENCES receipts(id) ON DELETE CASCADE
-  )`, (err) => {
-    if (!err) {
-      db.run(`ALTER TABLE items ADD COLUMN quantity REAL DEFAULT 1`, () => {});
-      db.run(`ALTER TABLE items ADD COLUMN unit_price REAL DEFAULT 0`, () => {});
-    }
-  });
+  )`);
+  if (!errItems) {
+    await runQuery(`ALTER TABLE items ADD COLUMN quantity REAL DEFAULT 1`);
+    await runQuery(`ALTER TABLE items ADD COLUMN unit_price REAL DEFAULT 0`);
+  }
 
-  db.run(`CREATE TABLE IF NOT EXISTS assignments (
+  await runQuery(`CREATE TABLE IF NOT EXISTS assignments (
     id ${serialType} PRIMARY KEY ${autoinc},
     item_id INTEGER,
     person_name TEXT,
     FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE CASCADE
   )`);
-});
+  
+  console.log("Database initialized.");
+}
+
+initializeDB();
 
 // API Endpoints
 
