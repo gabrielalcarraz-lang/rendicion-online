@@ -41,9 +41,13 @@ const upload = multer({ storage });
 
 // DB setup
 let db;
+let pool;
 if (process.env.DATABASE_URL) {
   const { Pool } = require('pg');
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
   
   const translateQuery = (sql) => {
     let i = 1;
