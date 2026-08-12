@@ -2,9 +2,44 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { uploadReceipt, updateReceipt, getReceiptNames } from '../api';
 import { ArrowLeft, Camera, CheckCircle } from 'lucide-react';
-import imageCompression from 'browser-image-compression';
-import Zoom from 'react-medium-image-zoom';
-import 'react-medium-image-zoom/dist/styles.css';
+
+// Native function to compress image without external libraries (prevents iOS WebWorker crashes)
+const compressImage = (file, maxWidth = 1200, quality = 0.7) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = event => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => {
+          if (!blob) {
+            reject(new Error('Canvas is empty'));
+            return;
+          }
+          const compressedFile = new File([blob], file.name || 'image.jpg', {
+            type: 'image/jpeg',
+            lastModified: Date.now()
+          });
+          resolve(compressedFile);
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = error => reject(error);
+    };
+    reader.onerror = error => reject(error);
+  });
+};
 
 export default function UploadReceipt() {
   const { id } = useParams();
@@ -45,15 +80,10 @@ export default function UploadReceipt() {
     try {
       let fileToUpload = file;
       if (!isManual && file && file.type.startsWith('image/')) {
-        const options = {
-          maxSizeMB: 1,
-          maxWidthOrHeight: 1200,
-          useWebWorker: true,
-        };
         try {
-          fileToUpload = await imageCompression(file, options);
+          fileToUpload = await compressImage(file, 1200, 0.7);
         } catch (e) {
-          console.error("Compression error", e);
+          console.error("Compression error, using original file", e);
         }
       }
 
@@ -93,6 +123,7 @@ export default function UploadReceipt() {
   };
 
   if (extractedData) {
+     const imageUrl = extractedData.image_path ? (extractedData.image_path.startsWith('http') ? extractedData.image_path : `https://rendicion-online.onrender.com${extractedData.image_path}`) : null;
      return (
        <div className="animate-fade-in">
          <div className="nav-bar">
@@ -104,17 +135,17 @@ export default function UploadReceipt() {
          <div className="glass-card">
            <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>Ingresa el Monto Total</h3>
            
-           {extractedData.image_path && (
+           {imageUrl && (
               <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                 <Zoom>
+                 <a href={imageUrl} target="_blank" rel="noopener noreferrer">
                    <img 
-                     src={extractedData.image_path.startsWith('http') ? extractedData.image_path : `https://rendicion-online.onrender.com${extractedData.image_path}`} 
+                     src={imageUrl} 
                      alt="Boleta" 
                      style={{ maxWidth: '100%', maxHeight: '400px', objectFit: 'contain', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }} 
                    />
-                 </Zoom>
+                 </a>
                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px' }}>
-                    Toca la imagen para hacer zoom y ver los detalles
+                    Toca la imagen para abrirla en pantalla completa y hacer zoom
                  </div>
               </div>
            )}
