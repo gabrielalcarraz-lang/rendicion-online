@@ -9,24 +9,27 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Rendición App',
-        short_name: 'Rendición',
-        description: 'Aplicación para rendición de boletas',
-        theme_color: '#1a1a1a',
-        background_color: '#0d0d0d',
-        display: 'standalone',
+        name: 'Rendiciones Online',
+        short_name: 'Rendiciones',
+        description: 'App para rendición de cuentas',
+        theme_color: '#ffffff',
         icons: [
           {
-            src: 'https://cdn-icons-png.flaticon.com/512/5551/5551221.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable'
+            src: '/favicon.svg',
+            sizes: '192x192',
+            type: 'image/svg+xml'
           }
         ]
       }
     })
   ],
   server: {
-    host: '0.0.0.0'
+    host: '0.0.0.0',
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true
+      }
+    }
   }
 })

@@ -1,11 +1,8 @@
 import axios from 'axios';
 
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('26.');
-const baseURL = isLocal 
-  ? `http://${window.location.hostname}:3000/api` 
-  : 'https://rendicion-online.onrender.com/api';
+const api = axios.create({ baseURL: '/api' });
 
-const api = axios.create({ baseURL });
+export default api;
 
 export const getReports = () => api.get('/reports');
 export const createReport = (name) => api.post('/reports', { name });
