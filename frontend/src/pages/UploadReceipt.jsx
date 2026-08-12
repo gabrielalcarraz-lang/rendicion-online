@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { uploadReceipt, updateReceipt, getReceiptNames } from '../api';
 import { ArrowLeft, Camera, CheckCircle } from 'lucide-react';
+import imageCompression from 'browser-image-compression';
+import Zoom from 'react-medium-image-zoom';
+import 'react-medium-image-zoom/dist/styles.css';
 
 export default function UploadReceipt() {
   const { id } = useParams();
@@ -40,10 +43,24 @@ export default function UploadReceipt() {
 
     setLoading(true);
     try {
+      let fileToUpload = file;
+      if (!isManual && file && file.type.startsWith('image/')) {
+        const options = {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1200,
+          useWebWorker: true,
+        };
+        try {
+          fileToUpload = await imageCompression(file, options);
+        } catch (e) {
+          console.error("Compression error", e);
+        }
+      }
+
       const formData = new FormData();
       formData.append('name', name);
       formData.append('paid_by', paidBy);
-      if (file) formData.append('receiptImage', file);
+      if (fileToUpload) formData.append('receiptImage', fileToUpload, fileToUpload.name || 'image.jpg');
       if (isManual) {
         formData.append('manualDetail', manualDetail);
         formData.append('manualAmount', manualAmount);
@@ -89,11 +106,16 @@ export default function UploadReceipt() {
            
            {extractedData.image_path && (
               <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                 <img 
-                   src={extractedData.image_path.startsWith('http') ? extractedData.image_path : `https://rendicion-online.onrender.com${extractedData.image_path}`} 
-                   alt="Boleta" 
-                   style={{ maxWidth: '100%', maxHeight: '400px', objectFit: 'contain', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }} 
-                 />
+                 <Zoom>
+                   <img 
+                     src={extractedData.image_path.startsWith('http') ? extractedData.image_path : `https://rendicion-online.onrender.com${extractedData.image_path}`} 
+                     alt="Boleta" 
+                     style={{ maxWidth: '100%', maxHeight: '400px', objectFit: 'contain', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }} 
+                   />
+                 </Zoom>
+                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    Toca la imagen para hacer zoom y ver los detalles
+                 </div>
               </div>
            )}
 
