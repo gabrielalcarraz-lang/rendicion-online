@@ -3,8 +3,6 @@ const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const Tesseract = require('tesseract.js');
-const pdfParse = require('pdf-parse');
 require('dotenv').config();
 
 const app = express();
@@ -242,11 +240,13 @@ app.get('/api/reports/:id', (req, res) => {
   });
 });
 
-// 4. Upload a receipt and run OCR (or save manual item)
+// 4. Upload a receipt (OCR removed)
 app.post('/api/reports/:id/receipts', upload.single('receiptImage'), async (req, res) => {
   const reportId = req.params.id;
   const { name, paid_by, manualAmount, manualDetail } = req.body;
-  const image_path = req.file ? `/uploads/${req.file.filename}` : null;
+  
+  // Cloudinary gives a full URL in req.file.path. Local gives a relative path.
+  const image_path = req.file ? (req.file.path.startsWith('http') ? req.file.path : `/uploads/${req.file.filename}`) : null;
 
   db.run(`INSERT INTO receipts (report_id, name, image_path, paid_by) VALUES (?, ?, ?, ?)`, 
     [reportId, name, image_path, paid_by], function(err) {
@@ -263,138 +263,15 @@ app.post('/api/reports/:id/receipts', upload.single('receiptImage'), async (req,
          if (err) return res.status(500).json({ error: err.message });
          return res.json({ id: receiptId, name: manualDetail, paid_by, image_path, iva, total_amount: total });
       });
-    } else if (req.file) {
-      const fullPath = path.isAbsolute(req.file.path) ? req.file.path : path.join(__dirname, req.file.path);
-      
-      const processText = (text) => {
-          let iva = 0;
-          let total = 0;
-          
-          const lines = text.split('\n');
-          lines.forEach(line => {
-              const lowerLine = line.toLowerCase();
-              const numRegex = /\b(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+)\b/g;
-              
-              if (lowerLine.includes('total') && !lowerLine.includes('subtotal')) {
-                  let match;
-                  let lastNum = 0;
-                  while ((match = numRegex.exec(line)) !== null) {
-                      lastNum = parseFloat(match[1].replace(/[.,]/g, ''));
-                  }
-                  if (lastNum > total) total = lastNum;
-              }
-              
-              if (lowerLine.includes('iva') || lowerLine.includes('19%')) {
-                  let match;
-                  let lastNum = 0;
-                  while ((match = numRegex.exec(line)) !== null) {
-                      const val = parseFloat(match[1].replace(/[.,]/g, ''));
-                      if (val !== 19) lastNum = val;
-                  }
-                  if (lastNum > 0 && lastNum < total) iva = lastNum;
-              }
-          });
-          
-          if (iva === 0 && total > 0) {
-              iva = Math.round(total - (total / 1.19));
-          }
-
-          db.run(`UPDATE receipts SET iva = ?, total_amount = ? WHERE id = ?`, [iva, total, receiptId], function(err) {
-              res.json({ id: receiptId, name, paid_by, image_path, iva, total_amount: total, raw_text: text });
-          });
-      };
-
-      if (req.file.mimetype === 'application/pdf') {
-         const dataBuffer = fs.readFileSync(fullPath);
-         pdfParse(dataBuffer).then(function(data) {
-             processText(data.text);
-         }).catch(err => {
-             console.error("PDF Error:", err);
-             res.json({ id: receiptId, name, paid_by, image_path, items: [], warning: "PDF Parsing Failed" });
-         });
-      } else {
-         const recognizeImage = async (imagePath) => {
-           try {
-             // Always preprocess the image for better number recognition
-             const Jimp = require('jimp');
-             const tmpPath = imagePath + '_tmp.jpg';
-             const image = await Jimp.read(imagePath);
-             // Apply greyscale, increase contrast significantly to separate numbers, and normalize
-             await image.greyscale().contrast(0.7).normalize().writeAsync(tmpPath);
-             
-             const result = await Tesseract.recognize(tmpPath, 'spa');
-             if (require('fs').existsSync(tmpPath)) require('fs').unlinkSync(tmpPath);
-             
-             console.log("--- OCR RAW TEXT ---");
-             console.log(result.data.text);
-             console.log("--------------------");
-             
-             return result.data.text;
-           } catch (err) {
-             console.error("OCR Error:", err);
-             return "";
-           }
-         };
-
-         recognizeImage(fullPath)
-          .then(text => processText(text))
-          .catch(err => {
-            console.error("OCR Error:", err);
-            res.json({ id: receiptId, name, paid_by, image_path, items: [], warning: "OCR Failed" });
-          });
-      }
     } else {
-       res.json({ id: receiptId, name, paid_by, image_path, items: [] });
+       res.json({ id: receiptId, name, paid_by, image_path, items: [], total_amount: 0 });
     }
   });
 });
 
-// Extract raw text manually (OCR / PDF)
+// Extract raw text manually (OCR / PDF) - DISABLED
 app.get('/api/receipts/:id/extract', (req, res) => {
-   const receiptId = req.params.id;
-   db.get(`SELECT image_path FROM receipts WHERE id = ?`, [receiptId], (err, receipt) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (!receipt || !receipt.image_path) return res.json({ text: '' });
-      
-      const fullPath = path.isAbsolute(receipt.image_path) ? receipt.image_path : path.join(__dirname, receipt.image_path);
-      if (!fs.existsSync(fullPath)) return res.json({ text: 'Archivo no encontrado.' });
-
-      if (fullPath.toLowerCase().endsWith('.pdf')) {
-         const dataBuffer = fs.readFileSync(fullPath);
-         pdfParse(dataBuffer).then(function(data) {
-             res.json({ text: data.text });
-         }).catch(err => {
-             res.json({ text: 'Error al leer el PDF.' });
-         });
-      } else {
-         const recognizeImage = async (imagePath) => {
-           try {
-             let result = await Tesseract.recognize(imagePath, 'spa');
-             const digits = (result.data.text.match(/\d/g) || []).length;
-             
-             if (digits < 3) {
-                 const Jimp = require('jimp');
-                 const tmpPath = imagePath + '_tmp2.jpg';
-                 const image = await Jimp.read(imagePath);
-                 await image.greyscale().contrast(0.6).normalize().writeAsync(tmpPath);
-                 result = await Tesseract.recognize(tmpPath, 'spa');
-                 if (require('fs').existsSync(tmpPath)) require('fs').unlinkSync(tmpPath);
-             }
-             return result.data.text;
-           } catch (err) {
-             return "";
-           }
-         };
-
-         recognizeImage(fullPath)
-          .then(text => {
-             res.json({ text: text });
-          })
-          .catch(err => {
-             res.json({ text: 'Error en OCR.' });
-          });
-      }
-   });
+   res.json({ text: '' });
 });
 
 // 5. Update items and assignments manually (Save changes to receipt)

@@ -51,7 +51,7 @@ export default function UploadReceipt() {
 
       const res = await uploadReceipt(id, formData);
       setExtractedData(res.data);
-      setEditAmount(res.data.total_amount || 0);
+      setEditAmount('');
     } catch (err) {
       console.error(err);
       alert("Hubo un error al procesar la boleta.");
@@ -85,19 +85,19 @@ export default function UploadReceipt() {
            <h2 style={{ margin: 0 }}>Verificar Boleta</h2>
          </div>
          <div className="glass-card">
-           <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>Verifica el Monto Extraído</h3>
+           <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>Ingresa el Monto Total</h3>
            
            {extractedData.image_path && (
               <div style={{ textAlign: 'center', marginBottom: '20px' }}>
                  <img 
-                   src={`http://localhost:3000${extractedData.image_path}`} 
+                   src={extractedData.image_path.startsWith('http') ? extractedData.image_path : `https://rendicion-online.onrender.com${extractedData.image_path}`} 
                    alt="Boleta" 
                    style={{ maxWidth: '100%', maxHeight: '400px', objectFit: 'contain', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }} 
                  />
               </div>
            )}
 
-           <label>Monto Final (Edita si es incorrecto)</label>
+           <label>Monto Total de la Boleta</label>
            <input 
              type="number" 
              value={editAmount} 
@@ -187,7 +187,7 @@ export default function UploadReceipt() {
                   <Camera size={40} style={{ marginBottom: '10px', color: 'var(--primary)' }} />
                   <div style={{ fontWeight: '600', color: 'white' }}>Toma una Foto o Sube la Boleta (Imagen o PDF)</div>
                   <div style={{ fontSize: '0.8rem', marginTop: '5px' }}>
-                    {file ? file.name : 'Se leerá el monto total automáticamente'}
+                    {file ? file.name : 'Podrás ver la foto en el siguiente paso para anotar el monto'}
                   </div>
                 </div>
                 <input 
@@ -202,9 +202,9 @@ export default function UploadReceipt() {
 
           <button type="submit" className="btn btn-primary" disabled={loading}>
             {loading ? (
-               <><div className="loader" style={{ width: '18px', height: '18px', borderWidth: '2px' }}></div> Procesando...</>
+               <><div className="loader" style={{ width: '18px', height: '18px', borderWidth: '2px' }}></div> Subiendo...</>
             ) : (
-               <>Extraer Monto <ArrowLeft style={{ transform: 'rotate(180deg)' }} size={20} /></>
+               <>Subir y Continuar <ArrowLeft style={{ transform: 'rotate(180deg)' }} size={20} /></>
             )}
           </button>
         </form>
