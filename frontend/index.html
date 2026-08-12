@@ -9,5 +9,29 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Destructor for PWA Service Worker to force users out of the cache trap
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (let registration of registrations) {
+            registration.unregister().then(function(boolean) {
+              if (boolean) {
+                console.log('Service Worker unregistered. Forcing reload to get fresh code.');
+                window.location.reload(true);
+              }
+            });
+          }
+        });
+      }
+      
+      // Also clear caches just in case
+      if ('caches' in window) {
+        caches.keys().then((names) => {
+          for (let name of names) {
+            caches.delete(name);
+          }
+        });
+      }
+    </script>
   </body>
 </html>
