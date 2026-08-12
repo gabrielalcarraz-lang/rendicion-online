@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { uploadReceipt, updateReceipt, getReceiptNames } from '../api';
 import { ArrowLeft, Camera, CheckCircle } from 'lucide-react';
+import localforage from 'localforage';
 
 // Native function to compress image without external libraries (prevents iOS WebWorker crashes)
 const compressImage = (file, maxWidth = 1200, quality = 0.7) => {
@@ -23,17 +24,8 @@ const compressImage = (file, maxWidth = 1200, quality = 0.7) => {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob(blob => {
-          if (!blob) {
-            reject(new Error('Canvas is empty'));
-            return;
-          }
-          const compressedFile = new File([blob], file.name || 'image.jpg', {
-            type: 'image/jpeg',
-            lastModified: Date.now()
-          });
-          resolve(compressedFile);
-        }, 'image/jpeg', quality);
+        canvas.toDataURL('image/jpeg', quality); // We'll just use toDataURL directly to get base64
+        resolve(canvas.toDataURL('image/jpeg', quality));
       };
       img.onerror = error => reject(error);
     };
@@ -56,6 +48,8 @@ export default function UploadReceipt() {
   const [extractedData, setExtractedData] = useState(null);
   const [editAmount, setEditAmount] = useState('');
   const [recentNames, setRecentNames] = useState([]);
+  
+  const [localImageUrl, setLocalImageUrl] = useState(null);
 
   useEffect(() => {
      getReceiptNames().then(res => setRecentNames(res.data)).catch(console.error);
@@ -78,25 +72,39 @@ export default function UploadReceipt() {
 
     setLoading(true);
     try {
-      let fileToUpload = file;
+      let base64Image = null;
       if (!isManual && file && file.type.startsWith('image/')) {
         try {
-          fileToUpload = await compressImage(file, 1200, 0.7);
+          base64Image = await compressImage(file, 1200, 0.7);
         } catch (e) {
-          console.error("Compression error, using original file", e);
+          console.error("Compression error", e);
         }
       }
 
+      // We only send text data now!
       const formData = new FormData();
       formData.append('name', name);
       formData.append('paid_by', paidBy);
-      if (fileToUpload) formData.append('receiptImage', fileToUpload, fileToUpload.name || 'image.jpg');
+      
+      // Let the backend know this is a photo receipt (so it creates the record), but don't send the file.
+      if (base64Image) {
+        formData.append('hasLocalImage', 'true');
+      }
+      
       if (isManual) {
         formData.append('manualDetail', manualDetail);
         formData.append('manualAmount', manualAmount);
       }
 
       const res = await uploadReceipt(id, formData);
+      const receiptId = res.data.id;
+      
+      // Save image to localforage
+      if (base64Image) {
+        await localforage.setItem(`receipt_${receiptId}`, base64Image);
+        setLocalImageUrl(base64Image);
+      }
+
       setExtractedData(res.data);
       setEditAmount('');
     } catch (err) {
@@ -123,7 +131,6 @@ export default function UploadReceipt() {
   };
 
   if (extractedData) {
-     const imageUrl = extractedData.image_path ? (extractedData.image_path.startsWith('http') ? extractedData.image_path : `https://rendicion-online.onrender.com${extractedData.image_path}`) : null;
      return (
        <div className="animate-fade-in">
          <div className="nav-bar">
@@ -135,11 +142,11 @@ export default function UploadReceipt() {
          <div className="glass-card">
            <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>Ingresa el Monto Total</h3>
            
-           {imageUrl && (
+           {localImageUrl && (
               <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                 <a href={imageUrl} target="_blank" rel="noopener noreferrer">
+                 <a href={localImageUrl} target="_blank" rel="noopener noreferrer">
                    <img 
-                     src={imageUrl} 
+                     src={localImageUrl} 
                      alt="Boleta" 
                      style={{ maxWidth: '100%', maxHeight: '400px', objectFit: 'contain', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }} 
                    />

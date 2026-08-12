@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getReport, closeReport, getSettlement } from '../api';
 import { ArrowLeft, Upload, CheckCircle, Trash2, Camera, User } from 'lucide-react';
+import localforage from 'localforage';
 
 export default function ReportDetails() {
   const { id } = useParams();
@@ -9,6 +10,9 @@ export default function ReportDetails() {
   const [report, setReport] = useState(null);
   const [settlement, setSettlement] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // Store local images here: { receipt_id: 'base64_string' }
+  const [localImages, setLocalImages] = useState({});
 
   useEffect(() => {
     fetchData();
@@ -21,8 +25,23 @@ export default function ReportDetails() {
          getReport(id),
          getSettlement(id)
       ]);
-      setReport(reportRes.data);
+      const reportData = reportRes.data;
+      setReport(reportData);
       setSettlement(settlementRes.data);
+      
+      // Load local images
+      if (reportData.receipts) {
+        const imageMap = {};
+        for (const receipt of reportData.receipts) {
+          if (receipt.image_path === 'local_storage') {
+            const base64 = await localforage.getItem(`receipt_${receipt.id}`);
+            if (base64) {
+              imageMap[receipt.id] = base64;
+            }
+          }
+        }
+        setLocalImages(imageMap);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -31,9 +50,19 @@ export default function ReportDetails() {
   };
 
   const handleClose = async () => {
-    if (!window.confirm("¿Seguro que quieres cuadrar y cerrar esta rendición? Esto borrará las fotos físicas de las boletas del servidor permanentemente.")) return;
+    if (!window.confirm("¿Seguro que quieres cuadrar y cerrar esta rendición? Las fotos locales serán borradas permanentemente de este dispositivo.")) return;
     try {
       await closeReport(id);
+      
+      // Delete all local images associated with this report
+      if (report && report.receipts) {
+        for (const receipt of report.receipts) {
+          if (receipt.image_path === 'local_storage') {
+            await localforage.removeItem(`receipt_${receipt.id}`);
+          }
+        }
+      }
+      
       fetchData(); // refresh
     } catch (err) {
       console.error(err);
@@ -141,7 +170,7 @@ export default function ReportDetails() {
                        <div style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>Monto Final Detectado:</div>
                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--success)' }}>${receipt.total_amount || 0}</div>
                     </div>
-                    {receipt.image_path && (
+                    {receipt.image_path && receipt.image_path !== 'local_storage' && (
                        <div style={{ textAlign: 'center', marginTop: '5px' }}>
                           <a 
                             href={receipt.image_path.startsWith('http') ? receipt.image_path : `https://rendicion-online.onrender.com${receipt.image_path}`} 
@@ -150,6 +179,18 @@ export default function ReportDetails() {
                             style={{ color: 'var(--primary)', textDecoration: 'underline', fontSize: '0.9rem' }}
                           >
                              Ver fotografía de la boleta
+                          </a>
+                       </div>
+                    )}
+                    {receipt.image_path === 'local_storage' && localImages[receipt.id] && (
+                       <div style={{ textAlign: 'center', marginTop: '5px' }}>
+                          <a 
+                            href={localImages[receipt.id]} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            style={{ color: 'var(--primary)', textDecoration: 'underline', fontSize: '0.9rem' }}
+                          >
+                             Ver fotografía local (se borrará al cuadrar)
                           </a>
                        </div>
                     )}

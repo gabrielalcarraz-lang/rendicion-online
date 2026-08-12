@@ -240,13 +240,13 @@ app.get('/api/reports/:id', (req, res) => {
   });
 });
 
-// 4. Upload a receipt (OCR removed)
-app.post('/api/reports/:id/receipts', upload.single('receiptImage'), async (req, res) => {
+// 4. Upload a receipt (Local storage / No Cloudinary)
+app.post('/api/reports/:id/receipts', upload.none(), async (req, res) => {
   const reportId = req.params.id;
-  const { name, paid_by, manualAmount, manualDetail } = req.body;
+  const { name, paid_by, manualAmount, manualDetail, hasLocalImage } = req.body;
   
-  // Cloudinary gives a full URL in req.file.path. Local gives a relative path.
-  const image_path = req.file ? (req.file.path.startsWith('http') ? req.file.path : `/uploads/${req.file.filename}`) : null;
+  // image_path is now a placeholder. If hasLocalImage is true, we store 'local_storage'
+  const image_path = hasLocalImage === 'true' ? 'local_storage' : null;
 
   db.run(`INSERT INTO receipts (report_id, name, image_path, paid_by) VALUES (?, ?, ?, ?)`, 
     [reportId, name, image_path, paid_by], function(err) {
