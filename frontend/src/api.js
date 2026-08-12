@@ -24,4 +24,3 @@ export const getSettlement = (id) => api.get(`/reports/${id}/settlement`);
 export const extractRawText = (receiptId) => api.get(`/receipts/${receiptId}/extract`);
 export const deleteReport = (id) => api.delete(`/reports/${id}`);
 
-export default api;
