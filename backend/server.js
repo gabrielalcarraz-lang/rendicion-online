@@ -21,8 +21,7 @@ if (process.env.CLOUDINARY_URL) {
     cloudinary: cloudinary,
     params: {
       folder: 'rendiciones',
-      allowed_formats: ['jpg', 'jpeg', 'png', 'pdf', 'heic', 'heif', 'webp'],
-      transformation: [{ width: 800, crop: "limit", quality: "auto:eco" }]
+      allowed_formats: ['jpg', 'jpeg', 'png', 'pdf', 'heic', 'heif', 'webp']
     }
   });
   console.log("Using Cloudinary for image storage.");
