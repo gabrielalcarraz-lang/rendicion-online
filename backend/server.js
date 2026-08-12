@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -112,8 +111,7 @@ if (process.env.DATABASE_URL) {
   };
   console.log("Using PostgreSQL for database.");
 } else {
-  db = new sqlite3.Database('./rendiciones.db');
-  console.log("Using SQLite for database.");
+  throw new Error("DATABASE_URL must be provided. SQLite is no longer supported in this environment.");
 }
 
 // Initialize tables
