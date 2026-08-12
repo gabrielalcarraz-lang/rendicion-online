@@ -144,13 +144,29 @@ export default function UploadReceipt() {
            
            {localImageUrl && (
               <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                 <a href={localImageUrl} target="_blank" rel="noopener noreferrer">
+                 <button 
+                   onClick={(e) => {
+                     e.preventDefault();
+                     const dataUrl = localImageUrl;
+                     const [header, base64] = dataUrl.split(',');
+                     const mime = header.match(/:(.*?);/)[1];
+                     const binary = atob(base64);
+                     const array = new Uint8Array(binary.length);
+                     for (let i = 0; i < binary.length; i++) {
+                       array[i] = binary.charCodeAt(i);
+                     }
+                     const blob = new Blob([array], { type: mime });
+                     const url = URL.createObjectURL(blob);
+                     window.open(url, '_blank');
+                   }}
+                   style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                 >
                    <img 
                      src={localImageUrl} 
                      alt="Boleta" 
                      style={{ maxWidth: '100%', maxHeight: '400px', objectFit: 'contain', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }} 
                    />
-                 </a>
+                 </button>
                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px' }}>
                     Toca la imagen para abrirla en pantalla completa y hacer zoom
                  </div>

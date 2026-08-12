@@ -184,14 +184,33 @@ export default function ReportDetails() {
                     )}
                     {receipt.image_path === 'local_storage' && localImages[receipt.id] && (
                        <div style={{ textAlign: 'center', marginTop: '5px' }}>
-                          <a 
-                            href={localImages[receipt.id]} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            style={{ color: 'var(--primary)', textDecoration: 'underline', fontSize: '0.9rem' }}
+                          <button 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              const dataUrl = localImages[receipt.id];
+                              const [header, base64] = dataUrl.split(',');
+                              const mime = header.match(/:(.*?);/)[1];
+                              const binary = atob(base64);
+                              const array = new Uint8Array(binary.length);
+                              for (let i = 0; i < binary.length; i++) {
+                                array[i] = binary.charCodeAt(i);
+                              }
+                              const blob = new Blob([array], { type: mime });
+                              const url = URL.createObjectURL(blob);
+                              window.open(url, '_blank');
+                            }}
+                            style={{ 
+                              color: 'var(--primary)', 
+                              textDecoration: 'underline', 
+                              fontSize: '0.9rem',
+                              background: 'none',
+                              border: 'none',
+                              padding: 0,
+                              cursor: 'pointer'
+                            }}
                           >
                              Ver fotografía local (se borrará al cuadrar)
-                          </a>
+                          </button>
                        </div>
                     )}
                  </div>
