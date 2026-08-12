@@ -144,7 +144,7 @@ export default function ReportDetails() {
                     {receipt.image_path && (
                        <div style={{ textAlign: 'center', marginTop: '5px' }}>
                           <a 
-                            href={`http://localhost:3000${receipt.image_path}`} 
+                            href={receipt.image_path.startsWith('http') ? receipt.image_path : `https://rendicion-online.onrender.com${receipt.image_path}`} 
                             target="_blank" 
                             rel="noopener noreferrer"
                             style={{ color: 'var(--primary)', textDecoration: 'underline', fontSize: '0.9rem' }}
