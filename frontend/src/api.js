@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: '/api' });
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('26.');
+const baseURL = isLocal 
+  ? `/api` 
+  : 'https://rendicion-online.onrender.com/api';
+
+const api = axios.create({ baseURL });
 
 export default api;
 
