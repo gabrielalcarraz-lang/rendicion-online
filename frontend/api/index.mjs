@@ -1,16 +1,11 @@
-import express from 'express';
-import cors from 'cors';
-import multer from 'multer';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import Tesseract from 'tesseract.js';
-import pdfParse from 'pdf-parse';
-import dotenv from 'dotenv';
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const express = require('express');
+const cors = require('cors');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+const Tesseract = require('tesseract.js');
+const pdfParse = require('pdf-parse');
+require('dotenv').config();
 
 const app = express();
 
@@ -20,18 +15,17 @@ app.use(express.json());
 // File Upload Setup - Enforce Cloudinary for Serverless
 let storage;
 if (process.env.CLOUDINARY_URL) {
-  const cloudinary = await import('cloudinary').then(m => m.default || m);
-  const v2 = cloudinary.v2;
-  const { CloudinaryStorage } = await import('multer-storage-cloudinary');
+  const cloudinary = require('cloudinary').v2;
+  const { CloudinaryStorage } = require('multer-storage-cloudinary');
   storage = new CloudinaryStorage({
-    cloudinary: v2,
+    cloudinary: cloudinary,
     params: {
       folder: 'rendiciones',
       allowed_formats: ['jpg', 'jpeg', 'png', 'pdf']
     }
   });
 } else {
-  // Fallback to memory storage if Cloudinary is missing
+  // Fallback to memory storage if Cloudinary is missing (useful for basic parsing without saving)
   storage = multer.memoryStorage();
 }
 const upload = multer({ storage });
@@ -40,8 +34,7 @@ const upload = multer({ storage });
 let db;
 let pool;
 if (process.env.DATABASE_URL) {
-  const pg = await import('pg');
-  const Pool = pg.default ? pg.default.Pool || pg.Pool : pg.Pool;
+  const { Pool } = require('pg');
   // Strip query parameters to prevent pg parser from overriding our ssl config
   const cleanUrl = process.env.DATABASE_URL.split('?')[0];
   pool = new Pool({
@@ -246,6 +239,7 @@ app.get('/api/reports/:id', (req, res) => {
 app.post('/api/reports/:id/receipts', upload.single('receiptImage'), async (req, res) => {
   const reportId = req.params.id;
   const { name, paid_by, manualAmount, manualDetail } = req.body;
+  // If memoryStorage, file is in req.file.buffer. If Cloudinary, file path is URL.
   const image_path = req.file && req.file.path ? req.file.path : null;
 
   db.run(`INSERT INTO receipts (report_id, name, image_path, paid_by) VALUES (?, ?, ?, ?)`, 
@@ -254,6 +248,7 @@ app.post('/api/reports/:id/receipts', upload.single('receiptImage'), async (req,
     
     const receiptId = this.lastID;
 
+    // If manual entry was provided instead of OCR
     if (manualAmount && manualDetail) {
       const total = parseFloat(manualAmount) || 0;
       const iva = Math.round(total - (total / 1.19));
@@ -263,6 +258,7 @@ app.post('/api/reports/:id/receipts', upload.single('receiptImage'), async (req,
          return res.json({ id: receiptId, name: manualDetail, paid_by, image_path, iva, total_amount: total });
       });
     } else if (req.file) {
+      // Memory storage means no direct URL for Tesseract
       const processText = (text) => {
           let iva = 0;
           let total = 0;
@@ -302,19 +298,18 @@ app.post('/api/reports/:id/receipts', upload.single('receiptImage'), async (req,
       };
 
       if (req.file.mimetype === 'application/pdf') {
-         import('node-fetch').then(fetchModule => {
-           const fetch = fetchModule.default || fetchModule;
-           fetch(image_path).then(res => res.buffer()).then(dataBuffer => {
-             pdfParse(dataBuffer).then(function(data) {
-                 processText(data.text);
-             }).catch(err => {
-                 console.error("PDF Error:", err);
-                 res.json({ id: receiptId, name, paid_by, image_path, items: [], warning: "PDF Parsing Failed" });
-             });
+         // Cloudinary provides a URL. We must fetch the PDF buffer first
+         const fetch = require('node-fetch');
+         fetch(image_path).then(res => res.buffer()).then(dataBuffer => {
+           pdfParse(dataBuffer).then(function(data) {
+               processText(data.text);
            }).catch(err => {
-              console.error("Fetch PDF Error:", err);
-              res.json({ id: receiptId, name, paid_by, image_path, items: [], warning: "PDF Fetch Failed" });
+               console.error("PDF Error:", err);
+               res.json({ id: receiptId, name, paid_by, image_path, items: [], warning: "PDF Parsing Failed" });
            });
+         }).catch(err => {
+            console.error("Fetch PDF Error:", err);
+            res.json({ id: receiptId, name, paid_by, image_path, items: [], warning: "PDF Fetch Failed" });
          });
       } else {
          const recognizeImage = async (imagePath) => {
@@ -340,6 +335,7 @@ app.post('/api/reports/:id/receipts', upload.single('receiptImage'), async (req,
   });
 });
 
+// Extract raw text manually (OCR / PDF)
 app.get('/api/receipts/:id/extract', (req, res) => {
    const receiptId = req.params.id;
    db.get(`SELECT image_path FROM receipts WHERE id = ?`, [receiptId], (err, receipt) => {
@@ -349,14 +345,12 @@ app.get('/api/receipts/:id/extract', (req, res) => {
       const fullPath = receipt.image_path;
 
       if (fullPath.toLowerCase().endsWith('.pdf')) {
-         import('node-fetch').then(fetchModule => {
-           const fetch = fetchModule.default || fetchModule;
-           fetch(fullPath).then(r => r.buffer()).then(dataBuffer => {
-             pdfParse(dataBuffer).then(function(data) {
-                 res.json({ text: data.text });
-             }).catch(err => {
-                 res.json({ text: 'Error al leer el PDF.' });
-             });
+         const fetch = require('node-fetch');
+         fetch(fullPath).then(r => r.buffer()).then(dataBuffer => {
+           pdfParse(dataBuffer).then(function(data) {
+               res.json({ text: data.text });
+           }).catch(err => {
+               res.json({ text: 'Error al leer el PDF.' });
            });
          });
       } else {
@@ -380,6 +374,7 @@ app.get('/api/receipts/:id/extract', (req, res) => {
    });
 });
 
+// 5. Update items and assignments manually
 app.post('/api/receipts/:id/save', (req, res) => {
    const receiptId = req.params.id;
    const { items } = req.body;
@@ -412,10 +407,13 @@ app.post('/api/receipts/:id/save', (req, res) => {
    });
 });
 
+// 7. Delete Report (Cascading)
 app.delete('/api/reports/:id', (req, res) => {
   const reportId = req.params.id;
 
   db.serialize(() => {
+    // Cloudinary files are NOT deleted here automatically since we only have the URL, 
+    // requiring Cloudinary API public_id to destroy. For simplicity, we just drop the DB records.
     db.run(`DELETE FROM assignments WHERE item_id IN (SELECT id FROM items WHERE receipt_id IN (SELECT id FROM receipts WHERE report_id = ?))`, [reportId]);
     db.run(`DELETE FROM items WHERE receipt_id IN (SELECT id FROM receipts WHERE report_id = ?)`, [reportId]);
     db.run(`DELETE FROM receipts WHERE report_id = ?`, [reportId]);
@@ -426,6 +424,7 @@ app.delete('/api/reports/:id', (req, res) => {
   });
 });
 
+// 8. Close Report
 app.post('/api/reports/:id/close', (req, res) => {
   const reportId = req.params.id;
   db.run(`UPDATE receipts SET image_path = NULL WHERE report_id = ?`, [reportId]);
@@ -435,6 +434,7 @@ app.post('/api/reports/:id/close', (req, res) => {
   });
 });
 
+// Settlement Calculation API
 app.get('/api/reports/:id/settlement', (req, res) => {
    const reportId = req.params.id;
    
@@ -479,6 +479,7 @@ app.get('/api/reports/:id/settlement', (req, res) => {
    });
 });
 
+// Update receipt amount (rectification)
 app.put('/api/receipts/:id', (req, res) => {
    const { total_amount } = req.body;
    const iva = Math.round(total_amount - (total_amount / 1.19));
@@ -489,6 +490,7 @@ app.put('/api/receipts/:id', (req, res) => {
    });
 });
 
+// Delete receipt
 app.delete('/api/receipts/:id', (req, res) => {
    const receiptId = req.params.id;
    db.serialize(() => {
@@ -506,6 +508,7 @@ app.delete('/api/receipts/:id', (req, res) => {
    });
 });
 
+// Get unique receipt names for autocomplete
 app.get('/api/receipt-names', (req, res) => {
    db.all(`SELECT DISTINCT name FROM receipts WHERE name IS NOT NULL AND name != '' ORDER BY name ASC`, [], (err, rows) => {
        if (err) return res.status(500).json({ error: err.message });
@@ -513,4 +516,5 @@ app.get('/api/receipt-names', (req, res) => {
    });
 });
 
-export default app;
+// Export the app for Vercel Serverless
+module.exports = app;
