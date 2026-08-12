@@ -53,9 +53,13 @@ export default function Home() {
           />
           <button type="submit" className="btn btn-primary" disabled={loading}>
             <PlusCircle size={20} />
-            {loading ? 'Creando...' : 'Crear Rendición'}
+            {loading ? <div className="loader"></div> : 'Crear Rendición'}
           </button>
         </form>
+        
+        <div style={{ textAlign: 'center', marginTop: '30px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+          Versión 1.1
+        </div>
       </div>
 
       <div className="glass-card">

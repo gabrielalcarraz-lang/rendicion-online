@@ -10,27 +10,37 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
-      // Destructor for PWA Service Worker to force users out of the cache trap
+      // Sistema de Auto-Actualización y Limpieza de Caché
+      const CURRENT_VERSION = "1.1";
+      
+      // 1. Destruir cualquier Service Worker antiguo siempre
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(function(registrations) {
           for (let registration of registrations) {
-            registration.unregister().then(function(boolean) {
-              if (boolean) {
-                console.log('Service Worker unregistered. Forcing reload to get fresh code.');
-                window.location.reload(true);
-              }
-            });
+            registration.unregister();
           }
         });
       }
-      
-      // Also clear caches just in case
-      if ('caches' in window) {
-        caches.keys().then((names) => {
-          for (let name of names) {
-            caches.delete(name);
-          }
-        });
+
+      // 2. Verificar si es una versión nueva
+      const storedVersion = localStorage.getItem('app_version');
+      if (storedVersion !== CURRENT_VERSION) {
+        console.log(`Actualizando aplicación de la versión ${storedVersion} a la ${CURRENT_VERSION}`);
+        
+        // Limpiar cachés del navegador
+        if ('caches' in window) {
+          caches.keys().then((names) => {
+            for (let name of names) {
+              caches.delete(name);
+            }
+          });
+        }
+        
+        // Guardar la nueva versión
+        localStorage.setItem('app_version', CURRENT_VERSION);
+        
+        // Forzar recarga completa (bypassing cache)
+        window.location.reload(true);
       }
     </script>
   </body>
